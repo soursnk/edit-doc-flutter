@@ -5,7 +5,7 @@ import '../viewmodels/auth_viewmodel.dart';
 import '../viewmodels/documentos_viewmodel.dart';
 import 'editor_view.dart';
 
-class HomeView extends StatelessWidget {
+class HomeView extends StatefulWidget {
   final AuthViewModel authViewModel;
   final DocumentosViewModel documentosViewModel;
 
@@ -15,36 +15,103 @@ class HomeView extends StatelessWidget {
     required this.documentosViewModel,
   });
 
+  @override
+  State<HomeView> createState() => _HomeViewState();
+}
+
+class _HomeViewState extends State<HomeView> {
+  AuthViewModel get authViewModel => widget.authViewModel;
+
+  DocumentosViewModel get documentosViewModel =>
+      widget.documentosViewModel;
+
+  @override
+  void initState() {
+    super.initState();
+    documentosViewModel.carregarDocumentos();
+  }
+
   void _mostrarPreferencias(BuildContext context) {
-    final usuario = authViewModel.usuarioAtual;
+    String tema = authViewModel.temaSelecionado;
+    bool notificacoes = authViewModel.notificacoesAtivadas;
 
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Minhas preferências'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Nome: ${usuario?.nome ?? ''}'),
-              Text('E-mail: ${usuario?.email ?? ''}'),
-              const SizedBox(height: 12),
-              Text(
-                'Tema: ${authViewModel.preferencias['tema'] ?? 'Claro'}',
+        return StatefulBuilder(
+          builder: (context, atualizarDialogo) {
+            return AlertDialog(
+              title: const Text('Minhas preferências'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Nome: ${authViewModel.usuarioAtual?.nome ?? ''}',
+                  ),
+                  Text(
+                    'E-mail: ${authViewModel.usuarioAtual?.email ?? ''}',
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Tema do aplicativo',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  DropdownButton<String>(
+                    value: tema,
+                    isExpanded: true,
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'Claro',
+                        child: Text('Claro'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Escuro',
+                        child: Text('Escuro'),
+                      ),
+                    ],
+                    onChanged: (novoTema) {
+                      if (novoTema == null) return;
+
+                      atualizarDialogo(() {
+                        tema = novoTema;
+                      });
+
+                      authViewModel.alterarTemaSelecionado(tema);
+                    },
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Notificações'),
+                    value: notificacoes,
+                    onChanged: (valor) {
+                      atualizarDialogo(() {
+                        notificacoes = valor;
+                      });
+
+                      authViewModel.alterarNotificacoes(valor);
+                    },
+                  ),
+                ],
               ),
-              Text(
-                'Notificações: '
-                '${authViewModel.preferencias['notificacoes'] == true ? 'Ativadas' : 'Desativadas'}',
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Fechar'),
-            ),
-          ],
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    await authViewModel.salvarPreferenciasAtuais();
+
+                    if (!context.mounted) return;
+
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Salvar'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -90,6 +157,92 @@ class HomeView extends StatelessWidget {
     );
   }
 
+  Future<void> _criarDocumento() async {
+    final controller = TextEditingController();
+
+    final nome = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Novo documento'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(
+              labelText: 'Nome do documento',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context, controller.text.trim());
+              },
+              child: const Text('Criar'),
+            ),
+          ],
+        );
+      },
+    );
+
+    controller.dispose();
+
+    if (!mounted || nome == null || nome.isEmpty) return;
+
+    await documentosViewModel.criarDocumento(
+      nome: nome,
+      conteudo: '',
+    );
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Documento criado com sucesso!'),
+      ),
+    );
+  }
+
+  Future<void> _excluirDocumento(int index) async {
+    final confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Excluir documento'),
+          content: const Text(
+            'Deseja realmente excluir este documento?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Excluir'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted || confirmar != true) return;
+
+    await documentosViewModel.excluirDocumento(index);
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Documento excluído com sucesso!'),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final usuario = authViewModel.usuarioAtual;
@@ -110,8 +263,16 @@ class HomeView extends StatelessWidget {
           ),
           IconButton(
             tooltip: 'Sair',
-            onPressed: () {
-              Navigator.pushReplacementNamed(context, '/');
+            onPressed: () async {
+              await authViewModel.fazerLogout();
+
+              if (!context.mounted) return;
+
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                '/',
+                (route) => false,
+              );
             },
             icon: const Icon(Icons.logout),
           ),
@@ -136,7 +297,7 @@ class HomeView extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             SizedBox(
-              height: 110,
+              height: 150,
               child: ListenableBuilder(
                 listenable: documentosViewModel,
                 builder: (context, child) {
@@ -152,13 +313,21 @@ class HomeView extends StatelessWidget {
                         onTap: () {
                           documentosViewModel.abrirDocumento(index);
                         },
+                        trailing: IconButton(
+                          tooltip: 'Excluir documento',
+                          icon: const Icon(
+                            Icons.delete_outline,
+                            color: Colors.red,
+                          ),
+                          onPressed: () => _excluirDocumento(index),
+                        ),
                       );
                     },
                   );
                 },
               ),
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 12),
             Expanded(
               child: EditorView(
                 viewModel: documentosViewModel,
@@ -166,6 +335,11 @@ class HomeView extends StatelessWidget {
             ),
           ],
         ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _criarDocumento,
+        icon: const Icon(Icons.add),
+        label: const Text('Novo documento'),
       ),
       bottomNavigationBar: const Padding(
         padding: EdgeInsets.all(12),

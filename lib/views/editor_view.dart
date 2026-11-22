@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../viewmodels/documentos_viewmodel.dart';
 
 class EditorView extends StatelessWidget {
@@ -37,8 +38,21 @@ class EditorView extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         ElevatedButton.icon(
-          onPressed: () {
-            viewModel.salvarDocumento();
+          onPressed: () async {
+            if (viewModel.documentoSelecionado == null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Selecione ou crie um documento primeiro.',
+                  ),
+                ),
+              );
+              return;
+            }
+
+            await viewModel.salvarDocumento();
+
+            if (!context.mounted) return;
 
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(

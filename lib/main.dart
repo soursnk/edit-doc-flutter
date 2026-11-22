@@ -20,16 +20,46 @@ class MeuApp extends StatefulWidget {
 
 class _MeuAppState extends State<MeuApp> {
   final AuthViewModel authViewModel = AuthViewModel();
+
   final DocumentosViewModel documentosViewModel =
       DocumentosViewModel();
 
+  bool inicializado = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _inicializarAplicativo();
+  }
+
+  Future<void> _inicializarAplicativo() async {
+    await authViewModel.restaurarSessao();
+
+    if (!mounted) return;
+
+    setState(() {
+      inicializado = true;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (!inicializado) {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          body: Center(
+            child: CircularProgressIndicator(),
+          ),
+        ),
+      );
+    }
+
     return ListenableBuilder(
       listenable: authViewModel,
       builder: (context, child) {
         final temaEscuro =
-            authViewModel.preferencias['tema'] == 'Escuro';
+            authViewModel.temaSelecionado == 'Escuro';
 
         return MaterialApp(
           debugShowCheckedModeBanner: false,
@@ -46,7 +76,8 @@ class _MeuAppState extends State<MeuApp> {
             brightness: Brightness.dark,
             useMaterial3: true,
           ),
-          initialRoute: '/',
+          initialRoute:
+              authViewModel.usuarioAtual != null ? '/home' : '/',
           routes: {
             '/': (context) => LoginView(
                   viewModel: authViewModel,
